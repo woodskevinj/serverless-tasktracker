@@ -88,8 +88,8 @@ The Vite dev server proxies all `/api` requests to the Express backend, so both 
    ```
 3. Configure `backend/.env` with your connection details:
    ```
-   DB_USER=postgres
-   DB_PASSWORD=postgres
+   DB_USER=xxxxxx
+   DB_PASSWORD=xxxxxx
    DB_HOST=localhost
    DB_PORT=5432
    DB_NAME=tasktracker
@@ -108,15 +108,15 @@ cd frontend && npx vitest run
 
 ## API Routes
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/projects` | List all projects |
-| GET | `/api/projects/:id` | Get a single project |
-| POST | `/api/projects` | Create a project |
-| GET | `/api/projects/:projectId/tasks` | List tasks for a project |
-| POST | `/api/projects/:projectId/tasks` | Create a task |
-| PATCH | `/api/tasks/:id/status` | Update task status |
-| DELETE | `/api/tasks/:id` | Delete a task |
+| Method | Route                            | Description              |
+| ------ | -------------------------------- | ------------------------ |
+| GET    | `/api/projects`                  | List all projects        |
+| GET    | `/api/projects/:id`              | Get a single project     |
+| POST   | `/api/projects`                  | Create a project         |
+| GET    | `/api/projects/:projectId/tasks` | List tasks for a project |
+| POST   | `/api/projects/:projectId/tasks` | Create a task            |
+| PATCH  | `/api/tasks/:id/status`          | Update task status       |
+| DELETE | `/api/tasks/:id`                 | Delete a task            |
 
 ## Current Status
 
