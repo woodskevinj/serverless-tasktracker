@@ -1,16 +1,100 @@
-# React + Vite
+# Task Tracker — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React single-page application for managing projects and tasks. Built with Vite and styled with Tailwind CSS.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Framework:** React 19
+- **Build tool:** Vite
+- **Styling:** Tailwind CSS (v4)
+- **Routing:** React Router v7
+- **Testing:** Vitest + React Testing Library + jest-dom
 
-## React Compiler
+## Project Structure
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```
+frontend/
+├── index.html
+├── vite.config.js          # Vite + Tailwind + API proxy + test config
+└── src/
+    ├── main.jsx            # App entry point (BrowserRouter)
+    ├── App.jsx             # Route definitions
+    ├── index.css           # Tailwind import
+    ├── api.js              # API client functions
+    ├── test-setup.js       # jest-dom setup for Vitest
+    ├── pages/
+    │   ├── ProjectList.jsx     # Home — list all projects
+    │   ├── CreateProject.jsx   # Form to create a new project
+    │   └── ProjectDetail.jsx   # Project view with tasks
+    ├── components/
+    │   ├── Navbar.jsx          # App header with navigation
+    │   ├── ProjectCard.jsx     # Project summary card
+    │   ├── TaskCard.jsx        # Task display with status/delete controls
+    │   └── TaskForm.jsx        # Form to add a new task
+    └── __tests__/
+        ├── ProjectList.test.jsx
+        ├── CreateProject.test.jsx
+        ├── ProjectDetail.test.jsx
+        ├── TaskCard.test.jsx
+        └── TaskForm.test.jsx
+```
 
-## Expanding the ESLint configuration
+## Setup
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+npm install
+```
+
+## Development Server
+
+```bash
+npm run dev
+# Starts on http://localhost:5173
+```
+
+The Vite dev server proxies all `/api` requests to `http://localhost:3001`, so the backend must be running for API calls to work. The UI is still fully navigable without the backend — pages display error messages when API calls fail.
+
+## Pages
+
+| Route | Page | Description |
+| --- | --- | --- |
+| `/` | ProjectList | Displays all projects as cards |
+| `/projects/new` | CreateProject | Form to create a new project |
+| `/projects/:id` | ProjectDetail | Project info, task list, and task creation form |
+
+## API Client (`src/api.js`)
+
+Thin wrapper around `fetch()` with error handling. All functions throw with the server's error message on non-2xx responses.
+
+| Function | Method | Endpoint |
+| --- | --- | --- |
+| `fetchProjects()` | GET | `/api/projects` |
+| `fetchProject(id)` | GET | `/api/projects/:id` |
+| `createProject(data)` | POST | `/api/projects` |
+| `fetchTasks(projectId)` | GET | `/api/projects/:projectId/tasks` |
+| `createTask(projectId, data)` | POST | `/api/projects/:projectId/tasks` |
+| `updateTaskStatus(id, status)` | PATCH | `/api/tasks/:id/status` |
+| `deleteTask(id)` | DELETE | `/api/tasks/:id` |
+
+## Testing
+
+```bash
+npx vitest run
+```
+
+Runs 17 tests across 5 test files. All tests mock the `api.js` module — no backend needed.
+
+### Test Coverage
+
+- **ProjectList** — loading state, successful render, error state, empty state
+- **CreateProject** — form rendering, successful submit + navigation, submit error
+- **ProjectDetail** — project + task rendering, status update, task deletion, error state
+- **TaskCard** — renders all fields, status change callback, delete callback
+- **TaskForm** — renders all fields, submit callback with form data, form clears after submit
+
+## Build
+
+```bash
+npm run build
+# Output in dist/
+```
