@@ -1,6 +1,6 @@
 # Task Tracker — Infrastructure
 
-AWS CDK app (Python) that defines the cloud infrastructure for the Task Tracker application.
+AWS CDK app (Python) that defines the cloud infrastructure for the Task Tracker application. Uses ECS with EC2 launch type to run the frontend and backend as Docker containers behind an Application Load Balancer.
 
 ## Tech Stack
 
@@ -11,21 +11,28 @@ AWS CDK app (Python) that defines the cloud infrastructure for the Task Tracker 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  VPC (2 AZs, us-east-1)                                │
-│                                                         │
-│  ┌──────────────────┐       ┌────────────────────────┐  │
-│  │  Public Subnets   │       │  Private Subnets        │  │
-│  │                  │       │                        │  │
-│  │  ┌────────────┐  │       │  ┌──────────────────┐  │  │
-│  │  │ EC2        │  │ :5432 │  │ RDS PostgreSQL   │  │  │
-│  │  │ t3.micro   │──┼───────┼─▶│ db.t3.micro      │  │  │
-│  │  │            │  │       │  │ DB: tasktracker   │  │  │
-│  │  └────────────┘  │       │  └──────────────────┘  │  │
-│  │   :22 :80 :443   │       │   Not publicly          │  │
-│  │   from 0.0.0.0/0 │       │   accessible             │  │
-│  └──────────────────┘       └────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
+                         ┌─────────────────────────────────────────────────────┐
+                         │  VPC (2 AZs, us-east-1)                            │
+                         │                                                     │
+Internet ──▶ ALB (:80)   │  ┌───────────────────────┐  ┌───────────────────┐  │
+              │          │  │  Public Subnets         │  │  Private Subnets   │  │
+              │          │  │                         │  │                   │  │
+              ├─ /api/* ─┼──┤  ┌───────────────────┐  │  │  ┌─────────────┐  │  │
+              │          │  │  │ ECS EC2 (t3.micro)│  │  │  │ RDS         │  │  │
+              │          │  │  │ ASG (1 instance)  │  │  │  │ PostgreSQL  │  │  │
+              │          │  │  │                   │  │  │  │ db.t3.micro │  │  │
+              │          │  │  │ ┌───────────────┐ │──┼──┼─▶│ tasktracker │  │  │
+              │          │  │  │ │ backend :3001 │ │  │  │  └─────────────┘  │  │
+              │          │  │  │ └───────────────┘ │  │  │  Not publicly     │  │
+              └─ /* ─────┼──┤  │ ┌───────────────┐ │  │  │  accessible       │  │
+                         │  │  │ │ frontend :80  │ │  │  │                   │  │
+                         │  │  │ └───────────────┘ │  │  │                   │  │
+                         │  │  └───────────────────┘  │  │                   │  │
+                         │  └───────────────────────┘  └───────────────────┘  │
+                         └─────────────────────────────────────────────────────┘
+
+ECR: tasktracker-frontend ──▶ frontend container (:80, nginx + React SPA)
+ECR: tasktracker-backend  ──▶ backend container (:3001, Express.js)
 ```
 
 ## Resources
@@ -33,24 +40,54 @@ AWS CDK app (Python) that defines the cloud infrastructure for the Task Tracker 
 | Resource | Type | Details |
 | --- | --- | --- |
 | VPC | `AWS::EC2::VPC` | 2 AZs, public + private isolated subnets, no NAT gateways |
-| EC2 Instance | `AWS::EC2::Instance` | t3.micro, Amazon Linux 2023, public subnet |
+| ECR Repositories | `AWS::ECR::Repository` | `tasktracker-frontend` and `tasktracker-backend` |
+| ECS Cluster | `AWS::ECS::Cluster` | EC2 launch type |
+| Auto Scaling Group | `AWS::AutoScaling::AutoScalingGroup` | t3.micro, ECS-optimized AMI, public subnet, capacity 1 |
+| Task Definition | `AWS::ECS::TaskDefinition` | Bridge networking, 2 containers (frontend:80, backend:3001) |
+| ECS Service | `AWS::ECS::Service` | Desired count 1, ASG capacity provider |
+| ALB | `AWS::ElasticLoadBalancingV2::LoadBalancer` | Internet-facing, path-based routing |
 | RDS Instance | `AWS::RDS::DBInstance` | db.t3.micro, PostgreSQL 16, private subnet, DB name `tasktracker` |
-| EC2 Security Group | `AWS::EC2::SecurityGroup` | Inbound: 22 (SSH), 80 (HTTP), 443 (HTTPS) from 0.0.0.0/0 |
-| RDS Security Group | `AWS::EC2::SecurityGroup` | Inbound: 5432 from EC2 security group only |
+| ALB Security Group | `AWS::EC2::SecurityGroup` | Inbound: 80 (HTTP), 443 (HTTPS) from 0.0.0.0/0 |
+| ECS Security Group | `AWS::EC2::SecurityGroup` | Inbound: 80, 3001 from ALB SG |
+| RDS Security Group | `AWS::EC2::SecurityGroup` | Inbound: 5432 from ECS SG only |
+
+## ALB Routing
+
+| Path | Target | Port |
+| --- | --- | --- |
+| `/api/*` | Backend container | 3001 |
+| `/*` (default) | Frontend container | 80 |
+
+The frontend nginx config also proxies `/api/` to `localhost:3001` since both containers share the same task network in bridge mode.
+
+## Backend Environment Variables
+
+The backend container receives RDS connection details at runtime:
+
+| Variable | Source |
+| --- | --- |
+| `DB_HOST` | RDS endpoint address |
+| `DB_PORT` | RDS endpoint port |
+| `DB_NAME` | `tasktracker` (static) |
+| `DB_USER` | Secrets Manager (auto-generated) |
+| `DB_PASSWORD` | Secrets Manager (auto-generated) |
+| `PORT` | `3001` (static) |
 
 ## Stack Outputs
 
 | Output | Description |
 | --- | --- |
+| `AlbDnsName` | Application Load Balancer DNS name |
 | `RdsEndpoint` | RDS PostgreSQL endpoint address |
-| `Ec2PublicIp` | EC2 instance public IP |
 | `RdsSecurityGroupId` | RDS security group ID |
+| `FrontendEcrUri` | Frontend ECR repository URI |
+| `BackendEcrUri` | Backend ECR repository URI |
 
 ## Project Structure
 
 ```
 infrastructure/
-├── app.py                      # CDK app entry point
+├── app.py                      # CDK app entry point (us-east-1)
 ├── cdk.json                    # CDK configuration
 ├── requirements.txt            # Python dependencies
 ├── requirements-dev.txt        # Test dependencies (pytest)
@@ -80,17 +117,21 @@ source .venv/bin/activate
 pytest -v
 ```
 
-Runs 7 tests using `aws_cdk.assertions.Template`. No AWS account or credentials needed.
+Runs 11 tests using `aws_cdk.assertions.Template`. No AWS account or credentials needed.
 
 ### Test Coverage
 
 - VPC is created
 - RDS instance type (`db.t3.micro`), engine (`postgres`), and database name (`tasktracker`)
 - RDS is not publicly accessible
-- EC2 instance type (`t3.micro`)
-- RDS security group allows port 5432 from EC2 security group
-- EC2 security group allows ports 22, 80, 443 from 0.0.0.0/0
-- Stack outputs exist for RDS endpoint, EC2 public IP, and RDS security group ID
+- RDS security group allows port 5432 from ECS security group
+- ECR repositories created (`tasktracker-frontend`, `tasktracker-backend`)
+- ECS cluster created
+- ASG launch configuration uses `t3.micro`
+- Task definition has 2 containers (frontend on port 80, backend on port 3001) with bridge networking
+- ALB is internet-facing
+- ECS service created
+- Stack outputs exist (ALB DNS, RDS endpoint, RDS SG ID, ECR URIs)
 
 ## Synthesize CloudFormation Template
 

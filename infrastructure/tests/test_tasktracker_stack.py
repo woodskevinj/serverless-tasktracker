@@ -9,11 +9,17 @@ def get_template():
     return assertions.Template.from_stack(stack)
 
 
+# ---------------------------------------------------------------
+# VPC
+# ---------------------------------------------------------------
 def test_vpc_created():
     template = get_template()
     template.resource_count_is("AWS::EC2::VPC", 1)
 
 
+# ---------------------------------------------------------------
+# RDS
+# ---------------------------------------------------------------
 def test_rds_instance_type_and_engine():
     template = get_template()
     template.has_resource_properties(
@@ -36,26 +42,15 @@ def test_rds_not_publicly_accessible():
     )
 
 
-def test_ec2_instance_type():
-    template = get_template()
-    template.has_resource_properties(
-        "AWS::EC2::Instance",
-        {
-            "InstanceType": "t3.micro",
-        },
-    )
-
-
-def test_rds_security_group_allows_postgres_from_ec2_sg():
+def test_rds_security_group_allows_postgres_from_ecs():
     template = get_template()
     template.has_resource_properties(
         "AWS::EC2::SecurityGroup",
         {
-            "GroupDescription": "Allow PostgreSQL access from EC2",
+            "GroupDescription": "Allow PostgreSQL access from ECS",
             "SecurityGroupIngress": assertions.Match.absent(),
         },
     )
-    # The ingress rule is created as a separate resource by CDK
     template.has_resource_properties(
         "AWS::EC2::SecurityGroupIngress",
         {
@@ -66,41 +61,106 @@ def test_rds_security_group_allows_postgres_from_ec2_sg():
     )
 
 
-def test_ec2_security_group_allows_ssh_http_https():
+# ---------------------------------------------------------------
+# ECR
+# ---------------------------------------------------------------
+def test_ecr_repositories_created():
     template = get_template()
     template.has_resource_properties(
-        "AWS::EC2::SecurityGroup",
+        "AWS::ECR::Repository",
+        {"RepositoryName": "tasktracker-frontend"},
+    )
+    template.has_resource_properties(
+        "AWS::ECR::Repository",
+        {"RepositoryName": "tasktracker-backend"},
+    )
+
+
+# ---------------------------------------------------------------
+# ECS Cluster
+# ---------------------------------------------------------------
+def test_ecs_cluster_created():
+    template = get_template()
+    template.resource_count_is("AWS::ECS::Cluster", 1)
+
+
+# ---------------------------------------------------------------
+# ASG
+# ---------------------------------------------------------------
+def test_asg_instance_type():
+    template = get_template()
+    template.has_resource_properties(
+        "AWS::AutoScaling::LaunchConfiguration",
         {
-            "GroupDescription": "Allow SSH, HTTP, and HTTPS access to EC2",
-            "SecurityGroupIngress": [
-                {
-                    "CidrIp": "0.0.0.0/0",
-                    "FromPort": 22,
-                    "IpProtocol": "tcp",
-                    "ToPort": 22,
-                },
-                {
-                    "CidrIp": "0.0.0.0/0",
-                    "FromPort": 80,
-                    "IpProtocol": "tcp",
-                    "ToPort": 80,
-                },
-                {
-                    "CidrIp": "0.0.0.0/0",
-                    "FromPort": 443,
-                    "IpProtocol": "tcp",
-                    "ToPort": 443,
-                },
-            ],
+            "InstanceType": "t3.micro",
         },
     )
 
 
+# ---------------------------------------------------------------
+# ECS Task Definition
+# ---------------------------------------------------------------
+def test_ecs_task_definition_has_two_containers():
+    template = get_template()
+    template.has_resource_properties(
+        "AWS::ECS::TaskDefinition",
+        {
+            "NetworkMode": "bridge",
+            "ContainerDefinitions": assertions.Match.array_with(
+                [
+                    assertions.Match.object_like(
+                        {
+                            "Name": "frontend",
+                            "PortMappings": [
+                                {"ContainerPort": 80, "HostPort": 80},
+                            ],
+                        }
+                    ),
+                    assertions.Match.object_like(
+                        {
+                            "Name": "backend",
+                            "PortMappings": [
+                                {"ContainerPort": 3001, "HostPort": 3001},
+                            ],
+                        }
+                    ),
+                ]
+            ),
+        },
+    )
+
+
+# ---------------------------------------------------------------
+# ALB
+# ---------------------------------------------------------------
+def test_alb_created():
+    template = get_template()
+    template.has_resource_properties(
+        "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        {
+            "Scheme": "internet-facing",
+        },
+    )
+
+
+# ---------------------------------------------------------------
+# ECS Service
+# ---------------------------------------------------------------
+def test_ecs_service_created():
+    template = get_template()
+    template.resource_count_is("AWS::ECS::Service", 1)
+
+
+# ---------------------------------------------------------------
+# Stack Outputs
+# ---------------------------------------------------------------
 def test_outputs_exist():
     template = get_template()
     outputs = template.to_json()["Outputs"]
     output_keys = list(outputs.keys())
 
+    assert any("AlbDnsName" in k for k in output_keys), "Missing AlbDnsName output"
     assert any("RdsEndpoint" in k for k in output_keys), "Missing RdsEndpoint output"
-    assert any("Ec2PublicIp" in k for k in output_keys), "Missing Ec2PublicIp output"
     assert any("RdsSecurityGroupId" in k for k in output_keys), "Missing RdsSecurityGroupId output"
+    assert any("FrontendEcrUri" in k for k in output_keys), "Missing FrontendEcrUri output"
+    assert any("BackendEcrUri" in k for k in output_keys), "Missing BackendEcrUri output"
