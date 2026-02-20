@@ -87,12 +87,14 @@ def test_ecs_cluster_created():
 # ---------------------------------------------------------------
 # ASG
 # ---------------------------------------------------------------
-def test_asg_instance_type():
+def test_asg_launch_template_instance_type():
     template = get_template()
     template.has_resource_properties(
-        "AWS::AutoScaling::LaunchConfiguration",
+        "AWS::EC2::LaunchTemplate",
         {
-            "InstanceType": "t3.micro",
+            "LaunchTemplateData": assertions.Match.object_like(
+                {"InstanceType": "t3.micro"}
+            ),
         },
     )
 

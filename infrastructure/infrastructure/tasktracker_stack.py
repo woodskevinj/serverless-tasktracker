@@ -8,6 +8,7 @@ from aws_cdk import (
     aws_ecs as ecs,
     aws_autoscaling as autoscaling,
     aws_elasticloadbalancingv2 as elbv2,
+    aws_iam as iam,
 )
 from constructs import Construct
 
@@ -134,22 +135,41 @@ class TasktrackerStack(Stack):
         # ---------------------------------------------------------------
         # Auto Scaling Group for ECS EC2 instances
         # ---------------------------------------------------------------
-        asg = autoscaling.AutoScalingGroup(
+        ecs_instance_role = iam.Role(
             self,
-            "EcsAsg",
-            vpc=vpc,
+            "EcsInstanceRole",
+            assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "service-role/AmazonEC2ContainerServiceforEC2Role"
+                ),
+            ],
+        )
+
+        launch_template = ec2.LaunchTemplate(
+            self,
+            "EcsLaunchTemplate",
             instance_type=ec2.InstanceType.of(
                 ec2.InstanceClass.T3, ec2.InstanceSize.MICRO
             ),
             machine_image=ecs.EcsOptimizedImage.amazon_linux2023(),
+            security_group=ecs_sg,
+            role=ecs_instance_role,
+            associate_public_ip_address=True,
+            user_data=ec2.UserData.for_linux(),
+        )
+
+        asg = autoscaling.AutoScalingGroup(
+            self,
+            "EcsAsg",
+            vpc=vpc,
+            launch_template=launch_template,
             vpc_subnets=ec2.SubnetSelection(
                 subnet_type=ec2.SubnetType.PUBLIC
             ),
-            security_group=ecs_sg,
             min_capacity=1,
             max_capacity=1,
             desired_capacity=1,
-            associate_public_ip_address=True,
         )
 
         capacity_provider = ecs.AsgCapacityProvider(

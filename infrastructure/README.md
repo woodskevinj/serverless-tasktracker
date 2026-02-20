@@ -42,7 +42,8 @@ ECR: tasktracker-backend  ──▶ backend container (:3001, Express.js)
 | VPC | `AWS::EC2::VPC` | 2 AZs, public + private isolated subnets, no NAT gateways |
 | ECR Repositories | `AWS::ECR::Repository` | `tasktracker-frontend` and `tasktracker-backend` |
 | ECS Cluster | `AWS::ECS::Cluster` | EC2 launch type |
-| Auto Scaling Group | `AWS::AutoScaling::AutoScalingGroup` | t3.micro, ECS-optimized AMI, public subnet, capacity 1 |
+| Launch Template | `AWS::EC2::LaunchTemplate` | t3.micro, ECS-optimized AMI, IAM role for ECS |
+| Auto Scaling Group | `AWS::AutoScaling::AutoScalingGroup` | Uses launch template, public subnet, capacity 1 |
 | Task Definition | `AWS::ECS::TaskDefinition` | Bridge networking, 2 containers (frontend:80, backend:3001) |
 | ECS Service | `AWS::ECS::Service` | Desired count 1, ASG capacity provider |
 | ALB | `AWS::ElasticLoadBalancingV2::LoadBalancer` | Internet-facing, path-based routing |
@@ -127,7 +128,7 @@ Runs 11 tests using `aws_cdk.assertions.Template`. No AWS account or credentials
 - RDS security group allows port 5432 from ECS security group
 - ECR repositories created (`tasktracker-frontend`, `tasktracker-backend`)
 - ECS cluster created
-- ASG launch configuration uses `t3.micro`
+- ASG launch template uses `t3.micro`
 - Task definition has 2 containers (frontend on port 80, backend on port 3001) with bridge networking
 - ALB is internet-facing
 - ECS service created
