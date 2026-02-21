@@ -6,9 +6,7 @@ from aws_cdk import (
     aws_rds as rds,
     aws_ecr as ecr,
     aws_ecs as ecs,
-    aws_autoscaling as autoscaling,
     aws_elasticloadbalancingv2 as elbv2,
-    aws_iam as iam,
 )
 from constructs import Construct
 
@@ -133,72 +131,19 @@ class TasktrackerStack(Stack):
         )
 
         # ---------------------------------------------------------------
-        # Auto Scaling Group for ECS EC2 instances
+        # ECS Task Definition (2 containers, awsvpc networking)
         # ---------------------------------------------------------------
-        ecs_instance_role = iam.Role(
-            self,
-            "EcsInstanceRole",
-            assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AmazonEC2ContainerServiceforEC2Role"
-                ),
-            ],
-        )
-
-        user_data = ec2.UserData.for_linux()
-        user_data.add_commands(
-            f"echo ECS_CLUSTER={cluster.cluster_name} >> /etc/ecs/ecs.config"
-        )
-
-        launch_template = ec2.LaunchTemplate(
-            self,
-            "EcsLaunchTemplate",
-            instance_type=ec2.InstanceType.of(
-                ec2.InstanceClass.T3, ec2.InstanceSize.MICRO
-            ),
-            machine_image=ecs.EcsOptimizedImage.amazon_linux2023(),
-            security_group=ecs_sg,
-            role=ecs_instance_role,
-            associate_public_ip_address=True,
-            user_data=user_data,
-        )
-
-        asg = autoscaling.AutoScalingGroup(
-            self,
-            "EcsAsg",
-            vpc=vpc,
-            launch_template=launch_template,
-            vpc_subnets=ec2.SubnetSelection(
-                subnet_type=ec2.SubnetType.PUBLIC
-            ),
-            min_capacity=1,
-            max_capacity=1,
-            desired_capacity=1,
-        )
-
-        capacity_provider = ecs.AsgCapacityProvider(
-            self,
-            "AsgCapacityProvider",
-            auto_scaling_group=asg,
-            enable_managed_termination_protection=False,
-        )
-        cluster.add_asg_capacity_provider(capacity_provider)
-
-        # ---------------------------------------------------------------
-        # ECS Task Definition (2 containers, host networking)
-        # ---------------------------------------------------------------
-        task_definition = ecs.Ec2TaskDefinition(
+        task_definition = ecs.FargateTaskDefinition(
             self,
             "TasktrackerTaskDef",
-            network_mode=ecs.NetworkMode.HOST,
+            cpu=256,
+            memory_limit_mib=512,
         )
 
         # Frontend container — uses nginx placeholder until real image is pushed to ECR
         task_definition.add_container(
             "frontend",
             image=ecs.ContainerImage.from_registry("nginx:alpine"),
-            memory_reservation_mib=128,
             memory_limit_mib=256,
             port_mappings=[
                 ecs.PortMapping(container_port=80),
@@ -216,7 +161,6 @@ class TasktrackerStack(Stack):
                 "node", "-e",
                 "require('http').createServer((req,res)=>{res.writeHead(200,{'Content-Type':'application/json'});res.end('[]')}).listen(3001)",
             ],
-            memory_reservation_mib=128,
             memory_limit_mib=256,
             port_mappings=[
                 ecs.PortMapping(container_port=3001),
@@ -264,7 +208,7 @@ class TasktrackerStack(Stack):
         # ---------------------------------------------------------------
         # ECS Service
         # ---------------------------------------------------------------
-        service = ecs.Ec2Service(
+        service = ecs.FargateService(
             self,
             "TasktrackerService",
             cluster=cluster,
@@ -272,6 +216,9 @@ class TasktrackerStack(Stack):
             desired_count=1,
             min_healthy_percent=0,
             max_healthy_percent=100,
+            security_groups=[ecs_sg],
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
+            assign_public_ip=True,
         )
 
         # Backend target group — /api/* routes

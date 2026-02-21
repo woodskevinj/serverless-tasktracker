@@ -100,6 +100,7 @@ curl -X PATCH http://localhost:3001/api/tasks/1/status \
 ## Testing
 
 ```bash
+npm install
 npm test
 ```
 

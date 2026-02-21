@@ -79,6 +79,7 @@ Thin wrapper around `fetch()` with error handling. All functions throw with the 
 ## Testing
 
 ```bash
+npm install
 npx vitest run
 ```
 

@@ -85,21 +85,6 @@ def test_ecs_cluster_created():
 
 
 # ---------------------------------------------------------------
-# ASG
-# ---------------------------------------------------------------
-def test_asg_launch_template_instance_type():
-    template = get_template()
-    template.has_resource_properties(
-        "AWS::EC2::LaunchTemplate",
-        {
-            "LaunchTemplateData": assertions.Match.object_like(
-                {"InstanceType": "t3.micro"}
-            ),
-        },
-    )
-
-
-# ---------------------------------------------------------------
 # ECS Task Definition
 # ---------------------------------------------------------------
 def test_ecs_task_definition_has_two_containers():
@@ -107,7 +92,10 @@ def test_ecs_task_definition_has_two_containers():
     template.has_resource_properties(
         "AWS::ECS::TaskDefinition",
         {
-            "NetworkMode": "host",
+            "RequiresCompatibilities": ["FARGATE"],
+            "NetworkMode": "awsvpc",
+            "Cpu": "256",
+            "Memory": "512",
             "ContainerDefinitions": assertions.Match.array_with(
                 [
                     assertions.Match.object_like(
@@ -115,7 +103,6 @@ def test_ecs_task_definition_has_two_containers():
                             "Name": "frontend",
                             "Image": "nginx:alpine",
                             "Memory": 256,
-                            "MemoryReservation": 128,
                             "PortMappings": [
                                 {"ContainerPort": 80},
                             ],
@@ -126,7 +113,6 @@ def test_ecs_task_definition_has_two_containers():
                             "Name": "backend",
                             "Image": "node:20-alpine",
                             "Memory": 256,
-                            "MemoryReservation": 128,
                             "PortMappings": [
                                 {"ContainerPort": 3001},
                             ],
@@ -165,6 +151,7 @@ def test_ecs_service_deployment_config():
         "AWS::ECS::Service",
         {
             "DesiredCount": 1,
+            "LaunchType": "FARGATE",
             "DeploymentConfiguration": {
                 "MinimumHealthyPercent": 0,
                 "MaximumPercent": 100,

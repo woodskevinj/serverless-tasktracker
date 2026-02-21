@@ -56,12 +56,12 @@ npm run dev
 
 ```bash
 # Backend — 16 tests
-cd backend && npm test
+cd backend && npm install && npm test
 
 # Frontend — 17 tests
-cd frontend && npx vitest run
+cd frontend && npm install && npx vitest run
 
-# Infrastructure — 7 tests
+# Infrastructure — 11 tests
 cd infrastructure && source .venv/bin/activate && pytest
 ```
 

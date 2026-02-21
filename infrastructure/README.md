@@ -1,6 +1,6 @@
 # Task Tracker — Infrastructure
 
-AWS CDK app (Python) that defines the cloud infrastructure for the Task Tracker application. Uses ECS with EC2 launch type to run the frontend and backend as Docker containers behind an Application Load Balancer.
+AWS CDK app (Python) that defines the cloud infrastructure for the Task Tracker application. Uses ECS Fargate (serverless compute) to run the frontend and backend as Docker containers behind an Application Load Balancer.
 
 ## Tech Stack
 
@@ -18,8 +18,8 @@ Internet ──▶ ALB (:80)   │  ┌─────────────�
               │          │  │  Public Subnets         │  │  Private Subnets   │  │
               │          │  │                         │  │                   │  │
               ├─ /api/* ─┼──┤  ┌───────────────────┐  │  │  ┌─────────────┐  │  │
-              │          │  │  │ ECS EC2 (t3.micro)│  │  │  │ RDS         │  │  │
-              │          │  │  │ ASG (1 instance)  │  │  │  │ PostgreSQL  │  │  │
+              │          │  │  │ ECS Fargate Task  │  │  │  │ RDS         │  │  │
+              │          │  │  │ (0.25 vCPU/512MB) │  │  │  │ PostgreSQL  │  │  │
               │          │  │  │                   │  │  │  │ db.t3.micro │  │  │
               │          │  │  │ ┌───────────────┐ │──┼──┼─▶│ tasktracker │  │  │
               │          │  │  │ │ backend :3001 │ │  │  │  └─────────────┘  │  │
@@ -41,15 +41,13 @@ ECR: tasktracker-backend  ──▶ backend container (:3001, Express.js)
 | --- | --- | --- |
 | VPC | `AWS::EC2::VPC` | 2 AZs, public + private isolated subnets, no NAT gateways |
 | ECR Repositories | `AWS::ECR::Repository` | `tasktracker-frontend` and `tasktracker-backend` |
-| ECS Cluster | `AWS::ECS::Cluster` | EC2 launch type |
-| Launch Template | `AWS::EC2::LaunchTemplate` | t3.micro, ECS-optimized AMI, IAM role for ECS |
-| Auto Scaling Group | `AWS::AutoScaling::AutoScalingGroup` | Uses launch template, public subnet, capacity 1 |
-| Task Definition | `AWS::ECS::TaskDefinition` | Host networking, 2 containers (frontend:80, backend:3001), placeholder images |
-| ECS Service | `AWS::ECS::Service` | Desired count 1, min healthy 0%, implicit EC2 placement |
+| ECS Cluster | `AWS::ECS::Cluster` | Fargate launch type |
+| Task Definition | `AWS::ECS::TaskDefinition` | awsvpc networking, 256 CPU / 512 MB, 2 containers (frontend:80, backend:3001), placeholder images |
+| ECS Service | `AWS::ECS::Service` | Fargate, desired count 1, min healthy 0%, public subnet, public IP assigned |
 | ALB | `AWS::ElasticLoadBalancingV2::LoadBalancer` | Internet-facing, path-based routing |
 | RDS Instance | `AWS::RDS::DBInstance` | db.t3.micro, PostgreSQL 16, private subnet, DB name `tasktracker` |
 | ALB Security Group | `AWS::EC2::SecurityGroup` | Inbound: 80 (HTTP), 443 (HTTPS) from 0.0.0.0/0 |
-| ECS Security Group | `AWS::EC2::SecurityGroup` | Inbound: 80, 3001 from ALB SG |
+| ECS Security Group | `AWS::EC2::SecurityGroup` | Inbound: 80, 3001 from ALB SG; attaches to Fargate task ENI |
 | RDS Security Group | `AWS::EC2::SecurityGroup` | Inbound: 5432 from ECS SG only |
 
 ## ALB Routing
@@ -59,7 +57,7 @@ ECR: tasktracker-backend  ──▶ backend container (:3001, Express.js)
 | `/api/*` | Backend container | 3001 |
 | `/*` (default) | Frontend container | 80 |
 
-The task definition uses host networking — containers bind directly to the EC2 host's network. The frontend nginx config proxies `/api/` to `localhost:3001` since both containers share the host's network stack.
+Fargate tasks use `awsvpc` network mode — each task gets its own ENI. Containers within the same task share a network namespace, so the frontend nginx config can still proxy `/api/` to `localhost:3001`.
 
 ## Backend Environment Variables
 
@@ -78,11 +76,11 @@ The backend container receives RDS connection details at runtime:
 
 **Placeholder images:** The task definition uses `nginx:alpine` (frontend) and `node:20-alpine` (backend) as placeholder images so the ECS service stabilizes on first deploy without needing images pushed to ECR. The backend container includes a `command` override that starts a minimal Node.js HTTP server on port 3001 (returns `[]` for any request) — without this, `node:20-alpine` exits immediately (its default command is the Node REPL), which kills the entire task since both containers are essential. Update the task definition to use ECR images after pushing real builds.
 
-**Memory:** Each container has a 128 MiB soft reservation and 256 MiB hard limit (512 MiB total max). A t3.micro has ~900 MiB available after OS/ECS agent overhead, so this fits comfortably.
+**Memory:** Each container has a 256 MiB hard limit (256 + 256 = 512 MiB), matching the task-level memory limit of 512 MiB. The task is allocated 0.25 vCPU (256 CPU units).
 
-**Single-instance deployment:** The service sets `min_healthy_percent=0` and `max_healthy_percent=100` so ECS can stop the old task before starting a new one on a single instance. This avoids host port conflicts during deployments.
+**Networking:** Tasks run in public subnets with `assign_public_ip=True`. This is required because there is no NAT gateway — tasks need a public IP to pull images from ECR and Docker Hub, and to reach Secrets Manager.
 
-**Cleanup ordering:** The capacity provider disables managed termination protection. The ECS service does not explicitly reference the capacity provider via `capacity_provider_strategies` — instead it relies on implicit EC2 placement through the cluster's registered capacity provider. This avoids a circular dependency during CloudFormation rollback/deletion where the capacity provider cannot be removed while the service still references it. EC2 instances register with the cluster via user data (`ECS_CLUSTER` written to `/etc/ecs/ecs.config`).
+**Single-task deployment:** The service sets `min_healthy_percent=0` and `max_healthy_percent=100` so ECS can stop the old task before starting a new one. This avoids capacity constraints during deployments when desired count is 1.
 
 ## Stack Outputs
 
@@ -128,7 +126,7 @@ source .venv/bin/activate
 pytest -v
 ```
 
-Runs 12 tests using `aws_cdk.assertions.Template`. No AWS account or credentials needed.
+Runs 11 tests using `aws_cdk.assertions.Template`. No AWS account or credentials needed.
 
 ### Test Coverage
 
@@ -138,11 +136,10 @@ Runs 12 tests using `aws_cdk.assertions.Template`. No AWS account or credentials
 - RDS security group allows port 5432 from ECS security group
 - ECR repositories created (`tasktracker-frontend`, `tasktracker-backend`)
 - ECS cluster created
-- ASG launch template uses `t3.micro`
-- Task definition has 2 containers (frontend on port 80, backend on port 3001) with host networking, placeholder images, and memory limits
+- Task definition has 2 containers (frontend on port 80, backend on port 3001) with awsvpc networking, Fargate compatibility, 256 CPU / 512 MB memory, placeholder images, and per-container memory limits
 - ALB is internet-facing
 - ECS service created
-- ECS service deployment config: min healthy 0%, max 100%
+- ECS service deployment config: Fargate launch type, min healthy 0%, max 100%
 - Stack outputs exist (ALB DNS, RDS endpoint, RDS SG ID, ECR URIs)
 
 ## Synthesize CloudFormation Template
