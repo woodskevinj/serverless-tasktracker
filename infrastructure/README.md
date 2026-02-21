@@ -45,7 +45,7 @@ ECR: tasktracker-backend  ──▶ backend container (:3001, Express.js)
 | Launch Template | `AWS::EC2::LaunchTemplate` | t3.micro, ECS-optimized AMI, IAM role for ECS |
 | Auto Scaling Group | `AWS::AutoScaling::AutoScalingGroup` | Uses launch template, public subnet, capacity 1 |
 | Task Definition | `AWS::ECS::TaskDefinition` | Host networking, 2 containers (frontend:80, backend:3001), placeholder images |
-| ECS Service | `AWS::ECS::Service` | Desired count 1, min healthy 0%, ASG capacity provider |
+| ECS Service | `AWS::ECS::Service` | Desired count 1, min healthy 0%, implicit EC2 placement |
 | ALB | `AWS::ElasticLoadBalancingV2::LoadBalancer` | Internet-facing, path-based routing |
 | RDS Instance | `AWS::RDS::DBInstance` | db.t3.micro, PostgreSQL 16, private subnet, DB name `tasktracker` |
 | ALB Security Group | `AWS::EC2::SecurityGroup` | Inbound: 80 (HTTP), 443 (HTTPS) from 0.0.0.0/0 |
@@ -82,7 +82,7 @@ The backend container receives RDS connection details at runtime:
 
 **Single-instance deployment:** The service sets `min_healthy_percent=0` and `max_healthy_percent=100` so ECS can stop the old task before starting a new one on a single instance. This avoids host port conflicts during deployments.
 
-**Cleanup ordering:** The capacity provider disables managed termination protection, and the ECS service declares an explicit dependency on the capacity provider so resources delete in the correct order during `cdk destroy`.
+**Cleanup ordering:** The capacity provider disables managed termination protection. The ECS service does not explicitly reference the capacity provider via `capacity_provider_strategies` — instead it relies on implicit EC2 placement through the cluster's registered capacity provider. This avoids a circular dependency during CloudFormation rollback/deletion where the capacity provider cannot be removed while the service still references it. EC2 instances register with the cluster via user data (`ECS_CLUSTER` written to `/etc/ecs/ecs.config`).
 
 ## Stack Outputs
 

@@ -146,6 +146,11 @@ class TasktrackerStack(Stack):
             ],
         )
 
+        user_data = ec2.UserData.for_linux()
+        user_data.add_commands(
+            f"echo ECS_CLUSTER={cluster.cluster_name} >> /etc/ecs/ecs.config"
+        )
+
         launch_template = ec2.LaunchTemplate(
             self,
             "EcsLaunchTemplate",
@@ -156,7 +161,7 @@ class TasktrackerStack(Stack):
             security_group=ecs_sg,
             role=ecs_instance_role,
             associate_public_ip_address=True,
-            user_data=ec2.UserData.for_linux(),
+            user_data=user_data,
         )
 
         asg = autoscaling.AutoScalingGroup(
@@ -176,7 +181,6 @@ class TasktrackerStack(Stack):
             self,
             "AsgCapacityProvider",
             auto_scaling_group=asg,
-            # Allow managed termination protection to be disabled during teardown
             enable_managed_termination_protection=False,
         )
         cluster.add_asg_capacity_provider(capacity_provider)
@@ -256,16 +260,7 @@ class TasktrackerStack(Stack):
             desired_count=1,
             min_healthy_percent=0,
             max_healthy_percent=100,
-            capacity_provider_strategies=[
-                ecs.CapacityProviderStrategy(
-                    capacity_provider=capacity_provider.capacity_provider_name,
-                    weight=1,
-                ),
-            ],
         )
-
-        # Ensure service is deleted before the capacity provider and cluster
-        service.node.add_dependency(capacity_provider)
 
         # Backend target group — /api/* routes
         listener.add_targets(
