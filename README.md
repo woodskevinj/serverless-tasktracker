@@ -88,6 +88,29 @@ The script will:
 
 On subsequent deploys, just run `./deploy.sh` again.
 
+## Tear Down
+
+To remove all AWS resources created by this project:
+
+```bash
+cd infrastructure
+cdk destroy
+```
+
+This will delete the entire CloudFormation stack, including:
+
+- **ECS** — cluster, service, task definitions, and the EC2 instance (Auto Scaling Group)
+- **ECR** — both repositories and all pushed images (`empty_on_delete` is enabled)
+- **ALB** — load balancer, listeners, and target groups
+- **RDS** — the PostgreSQL database instance and its data (`deletion_protection` is off)
+- **VPC** — subnets, route tables, internet gateway, and security groups
+- **IAM** — roles and policies created for ECS task execution and EC2 instances
+- **CloudWatch** — log groups created by ECS task logging
+
+CDK will prompt for confirmation before proceeding. The teardown typically takes 5-10 minutes as AWS deprovisions resources in dependency order (eCS service stops first, then the cluster, then networking).
+
+> **Note:** The Secrets Manager secret created by RDS may be retained with a scheduled deletion window (default 30 days). You can delete it immediately from the AWS console or with `aws secretsmanager delete-secret --secret-id <secret-arn> --force-delete-without-recovery`.
+
 ## Current Status
 
 - **Phase 1 (complete):** Frontend and backend built with full test suites. The app runs without a live PostgreSQL connection — the backend returns clear JSON error responses and the frontend displays user-friendly error messages.
