@@ -1,4 +1,7 @@
 node_modules
+__tests__
 .env
 .git
-__tests__
+.gitignore
+jest.config.js
+*.md
