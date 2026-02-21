@@ -238,6 +238,12 @@ class TasktrackerStack(Stack):
             logging=ecs.LogDrivers.aws_logs(stream_prefix="backend"),
         )
 
+        # Grant the task execution role permission to pull from ECR.
+        # The placeholder images (nginx:alpine, node:20-alpine) don't trigger
+        # this automatically, but deploy.sh swaps in ECR image URIs.
+        frontend_repo.grant_pull(task_definition.execution_role)
+        backend_repo.grant_pull(task_definition.execution_role)
+
         # ---------------------------------------------------------------
         # Application Load Balancer
         # ---------------------------------------------------------------
