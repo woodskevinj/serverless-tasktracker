@@ -113,6 +113,9 @@ def test_ecs_task_definition_has_two_containers():
                     assertions.Match.object_like(
                         {
                             "Name": "frontend",
+                            "Image": "nginx:alpine",
+                            "Memory": 256,
+                            "MemoryReservation": 128,
                             "PortMappings": [
                                 {"ContainerPort": 80, "HostPort": 80},
                             ],
@@ -121,6 +124,9 @@ def test_ecs_task_definition_has_two_containers():
                     assertions.Match.object_like(
                         {
                             "Name": "backend",
+                            "Image": "node:20-alpine",
+                            "Memory": 256,
+                            "MemoryReservation": 128,
                             "PortMappings": [
                                 {"ContainerPort": 3001, "HostPort": 3001},
                             ],

@@ -188,10 +188,11 @@ class TasktrackerStack(Stack):
             network_mode=ecs.NetworkMode.BRIDGE,
         )
 
-        # Frontend container
+        # Frontend container — uses nginx placeholder until real image is pushed to ECR
         task_definition.add_container(
             "frontend",
-            image=ecs.ContainerImage.from_ecr_repository(frontend_repo),
+            image=ecs.ContainerImage.from_registry("nginx:alpine"),
+            memory_reservation_mib=128,
             memory_limit_mib=256,
             port_mappings=[
                 ecs.PortMapping(container_port=80, host_port=80),
@@ -199,10 +200,11 @@ class TasktrackerStack(Stack):
             logging=ecs.LogDrivers.aws_logs(stream_prefix="frontend"),
         )
 
-        # Backend container
+        # Backend container — uses node placeholder until real image is pushed to ECR
         task_definition.add_container(
             "backend",
-            image=ecs.ContainerImage.from_ecr_repository(backend_repo),
+            image=ecs.ContainerImage.from_registry("node:20-alpine"),
+            memory_reservation_mib=128,
             memory_limit_mib=256,
             port_mappings=[
                 ecs.PortMapping(container_port=3001, host_port=3001),
