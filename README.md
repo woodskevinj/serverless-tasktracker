@@ -111,8 +111,18 @@ CDK will prompt for confirmation before proceeding. The teardown typically takes
 
 > **Note:** The Secrets Manager secret created by RDS may be retained with a scheduled deletion window (default 30 days). You can delete it immediately from the AWS console or with `aws secretsmanager delete-secret --secret-id <secret-arn> --force-delete-without-recovery`.
 
+## Known Limitations
+
+- **Database integration is not yet implemented.** The CDK stack provisions an RDS PostgreSQL instance and passes connection credentials to the backend via environment variables and Secrets Manager, but the application does not currently perform database migrations or persist data. All API responses are served from in-memory state. Full CRUD operations backed by PostgreSQL are planned for a future release.
+
 ## Current Status
 
-- **Phase 1 (complete):** Frontend and backend built with full test suites. The app runs without a live PostgreSQL connection — the backend returns clear JSON error responses and the frontend displays user-friendly error messages.
+- **Phase 1 (complete):** Frontend and backend built with full test suites. The backend returns structured JSON error responses when no database is connected and the frontend handles these gracefully.
 - **Phase 2 (complete):** AWS infrastructure defined in CDK — VPC, RDS PostgreSQL, ECS, ECR, ALB, and stack outputs. All tests passing.
-- **Phase 3 (complete):** Dockerized frontend and backend with deploy script for building, pushing, and deploying to ECS.
+- **Phase 3 (complete):** Containerized frontend and backend with a deploy script for building, pushing, and deploying to ECS.
+
+## Up Next
+
+- **Database migration** — Run `schema.sql` against the RDS instance to create the `projects` and `tasks` tables
+- **Backend persistence** — Connect the Express API to PostgreSQL so CRUD operations read and write to RDS instead of in-memory state
+- **CI/CD pipeline** — Automate image builds, pushes, and ECS deployments on merge to `main`
