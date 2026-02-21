@@ -206,10 +206,16 @@ class TasktrackerStack(Stack):
             logging=ecs.LogDrivers.aws_logs(stream_prefix="frontend"),
         )
 
-        # Backend container — uses node placeholder until real image is pushed to ECR
+        # Backend container — uses node placeholder until real image is pushed to ECR.
+        # The command override starts a minimal HTTP server so the container stays
+        # running and the ALB health check passes during initial deployment.
         task_definition.add_container(
             "backend",
             image=ecs.ContainerImage.from_registry("node:20-alpine"),
+            command=[
+                "node", "-e",
+                "require('http').createServer((req,res)=>{res.writeHead(200,{'Content-Type':'application/json'});res.end('[]')}).listen(3001)",
+            ],
             memory_reservation_mib=128,
             memory_limit_mib=256,
             port_mappings=[

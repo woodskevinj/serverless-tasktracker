@@ -76,7 +76,7 @@ The backend container receives RDS connection details at runtime:
 
 ## Deployment Notes
 
-**Placeholder images:** The task definition uses `nginx:alpine` (frontend) and `node:20-alpine` (backend) as placeholder images so the ECS service stabilizes on first deploy without needing images pushed to ECR. Update the task definition to use ECR images after pushing real builds.
+**Placeholder images:** The task definition uses `nginx:alpine` (frontend) and `node:20-alpine` (backend) as placeholder images so the ECS service stabilizes on first deploy without needing images pushed to ECR. The backend container includes a `command` override that starts a minimal Node.js HTTP server on port 3001 (returns `[]` for any request) — without this, `node:20-alpine` exits immediately (its default command is the Node REPL), which kills the entire task since both containers are essential. Update the task definition to use ECR images after pushing real builds.
 
 **Memory:** Each container has a 128 MiB soft reservation and 256 MiB hard limit (512 MiB total max). A t3.micro has ~900 MiB available after OS/ECS agent overhead, so this fits comfortably.
 
