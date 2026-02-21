@@ -1,16 +1,16 @@
 # Task Tracker
 
-A full-stack task management application for creating projects and tracking tasks within them. Built with React, Express.js, and PostgreSQL, with AWS infrastructure defined in CDK.
+A full-stack serverless task management application for creating projects and tracking tasks within them. Built with React, Express.js, and PostgreSQL, with AWS infrastructure defined in CDK.
 
 ## Tech Stack
 
-| Layer | Technology |
-| --- | --- |
-| Frontend | React (Vite) + Tailwind CSS |
-| Backend | Express.js + raw SQL via `pg` |
-| Database | PostgreSQL |
-| Infrastructure | AWS CDK (Python) — VPC, RDS, ECS, ECR, ALB |
-| Testing | Vitest (frontend), Jest (backend), pytest (infrastructure) |
+| Layer          | Technology                                                 |
+| -------------- | ---------------------------------------------------------- |
+| Frontend       | React (Vite) + Tailwind CSS                                |
+| Backend        | Express.js + raw SQL via `pg`                              |
+| Database       | PostgreSQL                                                 |
+| Infrastructure | AWS CDK (Python) — VPC, RDS, ECS, ECR, ALB                 |
+| Testing        | Vitest (frontend), Jest (backend), pytest (infrastructure) |
 
 ## Project Structure
 
@@ -80,6 +80,7 @@ cd ..
 ```
 
 The script will:
+
 1. Discover ECS cluster/service names from CloudFormation
 2. Log in to ECR
 3. Build and push the frontend and backend Docker images
