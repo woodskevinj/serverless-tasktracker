@@ -176,16 +176,18 @@ class TasktrackerStack(Stack):
             self,
             "AsgCapacityProvider",
             auto_scaling_group=asg,
+            # Allow managed termination protection to be disabled during teardown
+            enable_managed_termination_protection=False,
         )
         cluster.add_asg_capacity_provider(capacity_provider)
 
         # ---------------------------------------------------------------
-        # ECS Task Definition (2 containers, bridge networking)
+        # ECS Task Definition (2 containers, host networking)
         # ---------------------------------------------------------------
         task_definition = ecs.Ec2TaskDefinition(
             self,
             "TasktrackerTaskDef",
-            network_mode=ecs.NetworkMode.BRIDGE,
+            network_mode=ecs.NetworkMode.HOST,
         )
 
         # Frontend container — uses nginx placeholder until real image is pushed to ECR
@@ -195,7 +197,7 @@ class TasktrackerStack(Stack):
             memory_reservation_mib=128,
             memory_limit_mib=256,
             port_mappings=[
-                ecs.PortMapping(container_port=80, host_port=80),
+                ecs.PortMapping(container_port=80),
             ],
             logging=ecs.LogDrivers.aws_logs(stream_prefix="frontend"),
         )
@@ -207,7 +209,7 @@ class TasktrackerStack(Stack):
             memory_reservation_mib=128,
             memory_limit_mib=256,
             port_mappings=[
-                ecs.PortMapping(container_port=3001, host_port=3001),
+                ecs.PortMapping(container_port=3001),
             ],
             environment={
                 "DB_HOST": db_instance.db_instance_endpoint_address,
@@ -252,6 +254,8 @@ class TasktrackerStack(Stack):
             cluster=cluster,
             task_definition=task_definition,
             desired_count=1,
+            min_healthy_percent=0,
+            max_healthy_percent=100,
             capacity_provider_strategies=[
                 ecs.CapacityProviderStrategy(
                     capacity_provider=capacity_provider.capacity_provider_name,
@@ -260,8 +264,11 @@ class TasktrackerStack(Stack):
             ],
         )
 
+        # Ensure service is deleted before the capacity provider and cluster
+        service.node.add_dependency(capacity_provider)
+
         # Backend target group — /api/* routes
-        backend_tg = listener.add_targets(
+        listener.add_targets(
             "BackendTarget",
             port=3001,
             protocol=elbv2.ApplicationProtocol.HTTP,
@@ -279,7 +286,7 @@ class TasktrackerStack(Stack):
         )
 
         # Frontend target group — default (everything else)
-        frontend_tg = listener.add_targets(
+        listener.add_targets(
             "FrontendTarget",
             port=80,
             targets=[

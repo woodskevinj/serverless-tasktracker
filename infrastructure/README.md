@@ -44,8 +44,8 @@ ECR: tasktracker-backend  ──▶ backend container (:3001, Express.js)
 | ECS Cluster | `AWS::ECS::Cluster` | EC2 launch type |
 | Launch Template | `AWS::EC2::LaunchTemplate` | t3.micro, ECS-optimized AMI, IAM role for ECS |
 | Auto Scaling Group | `AWS::AutoScaling::AutoScalingGroup` | Uses launch template, public subnet, capacity 1 |
-| Task Definition | `AWS::ECS::TaskDefinition` | Bridge networking, 2 containers (frontend:80, backend:3001) |
-| ECS Service | `AWS::ECS::Service` | Desired count 1, ASG capacity provider |
+| Task Definition | `AWS::ECS::TaskDefinition` | Host networking, 2 containers (frontend:80, backend:3001), placeholder images |
+| ECS Service | `AWS::ECS::Service` | Desired count 1, min healthy 0%, ASG capacity provider |
 | ALB | `AWS::ElasticLoadBalancingV2::LoadBalancer` | Internet-facing, path-based routing |
 | RDS Instance | `AWS::RDS::DBInstance` | db.t3.micro, PostgreSQL 16, private subnet, DB name `tasktracker` |
 | ALB Security Group | `AWS::EC2::SecurityGroup` | Inbound: 80 (HTTP), 443 (HTTPS) from 0.0.0.0/0 |
@@ -59,7 +59,7 @@ ECR: tasktracker-backend  ──▶ backend container (:3001, Express.js)
 | `/api/*` | Backend container | 3001 |
 | `/*` (default) | Frontend container | 80 |
 
-The frontend nginx config also proxies `/api/` to `localhost:3001` since both containers share the same task network in bridge mode.
+The task definition uses host networking — containers bind directly to the EC2 host's network. The frontend nginx config proxies `/api/` to `localhost:3001` since both containers share the host's network stack.
 
 ## Backend Environment Variables
 
@@ -73,6 +73,16 @@ The backend container receives RDS connection details at runtime:
 | `DB_USER` | Secrets Manager (auto-generated) |
 | `DB_PASSWORD` | Secrets Manager (auto-generated) |
 | `PORT` | `3001` (static) |
+
+## Deployment Notes
+
+**Placeholder images:** The task definition uses `nginx:alpine` (frontend) and `node:20-alpine` (backend) as placeholder images so the ECS service stabilizes on first deploy without needing images pushed to ECR. Update the task definition to use ECR images after pushing real builds.
+
+**Memory:** Each container has a 128 MiB soft reservation and 256 MiB hard limit (512 MiB total max). A t3.micro has ~900 MiB available after OS/ECS agent overhead, so this fits comfortably.
+
+**Single-instance deployment:** The service sets `min_healthy_percent=0` and `max_healthy_percent=100` so ECS can stop the old task before starting a new one on a single instance. This avoids host port conflicts during deployments.
+
+**Cleanup ordering:** The capacity provider disables managed termination protection, and the ECS service declares an explicit dependency on the capacity provider so resources delete in the correct order during `cdk destroy`.
 
 ## Stack Outputs
 
@@ -118,7 +128,7 @@ source .venv/bin/activate
 pytest -v
 ```
 
-Runs 11 tests using `aws_cdk.assertions.Template`. No AWS account or credentials needed.
+Runs 12 tests using `aws_cdk.assertions.Template`. No AWS account or credentials needed.
 
 ### Test Coverage
 
@@ -129,9 +139,10 @@ Runs 11 tests using `aws_cdk.assertions.Template`. No AWS account or credentials
 - ECR repositories created (`tasktracker-frontend`, `tasktracker-backend`)
 - ECS cluster created
 - ASG launch template uses `t3.micro`
-- Task definition has 2 containers (frontend on port 80, backend on port 3001) with bridge networking
+- Task definition has 2 containers (frontend on port 80, backend on port 3001) with host networking, placeholder images, and memory limits
 - ALB is internet-facing
 - ECS service created
+- ECS service deployment config: min healthy 0%, max 100%
 - Stack outputs exist (ALB DNS, RDS endpoint, RDS SG ID, ECR URIs)
 
 ## Synthesize CloudFormation Template

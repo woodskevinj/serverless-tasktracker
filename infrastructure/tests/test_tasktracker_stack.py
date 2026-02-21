@@ -107,7 +107,7 @@ def test_ecs_task_definition_has_two_containers():
     template.has_resource_properties(
         "AWS::ECS::TaskDefinition",
         {
-            "NetworkMode": "bridge",
+            "NetworkMode": "host",
             "ContainerDefinitions": assertions.Match.array_with(
                 [
                     assertions.Match.object_like(
@@ -117,7 +117,7 @@ def test_ecs_task_definition_has_two_containers():
                             "Memory": 256,
                             "MemoryReservation": 128,
                             "PortMappings": [
-                                {"ContainerPort": 80, "HostPort": 80},
+                                {"ContainerPort": 80},
                             ],
                         }
                     ),
@@ -128,7 +128,7 @@ def test_ecs_task_definition_has_two_containers():
                             "Memory": 256,
                             "MemoryReservation": 128,
                             "PortMappings": [
-                                {"ContainerPort": 3001, "HostPort": 3001},
+                                {"ContainerPort": 3001},
                             ],
                         }
                     ),
@@ -157,6 +157,20 @@ def test_alb_created():
 def test_ecs_service_created():
     template = get_template()
     template.resource_count_is("AWS::ECS::Service", 1)
+
+
+def test_ecs_service_deployment_config():
+    template = get_template()
+    template.has_resource_properties(
+        "AWS::ECS::Service",
+        {
+            "DesiredCount": 1,
+            "DeploymentConfiguration": {
+                "MinimumHealthyPercent": 0,
+                "MaximumPercent": 100,
+            },
+        },
+    )
 
 
 # ---------------------------------------------------------------
