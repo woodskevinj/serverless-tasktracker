@@ -232,7 +232,7 @@ class TasktrackerStack(Stack):
                     container_port=3001,
                 ),
             ],
-            health_check=elbv2.HealthCheck(path="/api/projects"),
+            health_check=elbv2.HealthCheck(path="/health"),
             conditions=[
                 elbv2.ListenerCondition.path_patterns(["/api/*"]),
             ],
