@@ -54,6 +54,7 @@ ECR: tasktracker-backend  ──▶ backend container (:3001, Express.js)
 
 | Path | Target | Port |
 | --- | --- | --- |
+| `/health` | Backend container (health check only) | 3001 |
 | `/api/*` | Backend container | 3001 |
 | `/*` (default) | Frontend container | 80 |
 
@@ -80,7 +81,7 @@ The backend container receives RDS connection details at runtime:
 
 **Networking:** Tasks run in public subnets with `assign_public_ip=True`. This is required because there is no NAT gateway — tasks need a public IP to pull images from ECR and Docker Hub, and to reach Secrets Manager.
 
-**Single-task deployment:** The service sets `min_healthy_percent=0` and `max_healthy_percent=100` so ECS can stop the old task before starting a new one. This avoids capacity constraints during deployments when desired count is 1.
+**Zero-downtime deployment:** The service sets `min_healthy_percent=100` and `max_healthy_percent=200` so ECS starts the new task and waits for it to pass health checks before stopping the old one. This eliminates the 503 window during deployments — both tasks briefly serve traffic simultaneously, then the old one is stopped once the new one is healthy. The backend health check uses a 10-second interval with a threshold of 2 consecutive successes (20 seconds to go healthy) rather than the ALB default of 30s × 5 = 150 seconds.
 
 ## Stack Outputs
 

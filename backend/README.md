@@ -70,6 +70,7 @@ node server.js
 
 | Method | Route | Description |
 | --- | --- | --- |
+| GET | `/health` | Health check — returns `{"status":"ok"}`, no DB required |
 | GET | `/api/projects` | List all projects |
 | GET | `/api/projects/:id` | Get a single project |
 | POST | `/api/projects` | Create a project |
@@ -116,3 +117,4 @@ Runs 16 tests across 2 test files. All tests mock the database — no PostgreSQL
 - `app.js` exports the Express app without calling `listen()`, so it can be imported by both `server.js` (production) and test files (via Supertest)
 - All routes use parameterized queries (`$1`, `$2`) to prevent SQL injection
 - Every route wraps its database query in try/catch for graceful error handling
+- The `pg` Pool is configured with `ssl: { rejectUnauthorized: false }` to satisfy RDS PostgreSQL 16's SSL requirement. The pool is lazy — no connection is opened until a route calls `pool.query()`
