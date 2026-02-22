@@ -153,8 +153,8 @@ def test_ecs_service_deployment_config():
             "DesiredCount": 1,
             "LaunchType": "FARGATE",
             "DeploymentConfiguration": {
-                "MinimumHealthyPercent": 0,
-                "MaximumPercent": 100,
+                "MinimumHealthyPercent": 100,
+                "MaximumPercent": 200,
             },
         },
     )
