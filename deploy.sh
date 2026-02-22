@@ -93,7 +93,13 @@ aws ecs update-service \
   --query "service.deployments[0].{Status:status,Running:runningCount,Desired:desiredCount}" \
   --output table
 
+ALB_DNS=$(aws cloudformation describe-stacks \
+  --stack-name "$STACK_NAME" \
+  --query "Stacks[0].Outputs[?OutputKey=='AlbDnsName'].OutputValue" \
+  --output text)
+
 echo ""
 echo "=== Deployment triggered successfully ==="
 echo "Task definition: ${NEW_TASK_DEF_ARN}"
+echo "Application URL: http://${ALB_DNS}"
 echo "Monitor with: aws ecs describe-services --cluster ${CLUSTER_ARN} --services ${SERVICE_NAME} --query 'services[0].deployments'"
